@@ -29,7 +29,7 @@ struct event {
 	int ev_fd;
 	short ev_events;	//Event类型
 
-	void (*ev_callback)(int, int, void *arg); //事件处理回调函数
+	void (*ev_callback)(int, short, void *arg); //事件处理回调函数
 
 	struct timeval ev_timeout;
 
@@ -49,8 +49,8 @@ struct eventop {
 };
 
 void* event_init(void);
-void event_set(struct event*, int, int, void (*)(int, int, void*), void*);
-void event_add(struct event*, struct timeval *);
+void event_set(struct event*, int, short, void (*)(int, short, void*), void*);
+int event_add(struct event*, struct timeval *);
 int event_del(struct event*);
 void event_active(struct event*, int);
 int event_dispatch(void);

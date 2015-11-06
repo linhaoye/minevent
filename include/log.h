@@ -28,7 +28,10 @@ extern "C" {
 #define LOG_DEBUG(fmt, ...)
 #endif
 
-#define LOG_ERROR(fmt, ...) LOG_OUTPUT(stderr, fmt, ## __VA_ARGS__)
+#define LOG_ERROR(fmt, ...) do {                    \
+            LOG_OUTPUT(stderr, fmt, ## __VA_ARGS__);\
+            exit(1);                                \
+} while(0)
 
 #ifdef __cplusplus
 }

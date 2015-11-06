@@ -14,10 +14,11 @@ struct event_base {
 	int event_count;
 	int event_count_active;
 
-	struct event_list *activequeues;
+	struct event_list **activequeues;
 	int nactivequeues;
 
 	struct event_list eventqueue;
+	struct timeval event_tv;
 
 	RB_HEAD(event_tree, event) timetree;
 };
