@@ -77,6 +77,40 @@ void* event_init(void)
 	return (current_base);
 }
 
+int event_base_priority_init(struct event_base *base, int npriorities)
+{
+	int i;
+	LOG_DEBUG("event base priority init: %d", npriorities);
+
+	if (base->event_count_active)
+		return (-1);
+
+	if (base->nactivequeues && npriorities != base->nactivequeues) {
+		for (i = 0; i < base->nactivequeues; ++i) {
+			free(base->activequeues[i]);
+		}
+		free(base->activequeues);
+	}
+
+	//初始化优先队列
+	base->nactivequeues = npriorities;
+	base->activequeues = (struct event_list **) calloc(npriorities,
+		npriorities * sizeof(struct event_list *));
+
+	if (base->activequeues == NULL)
+		LOG_ERROR("calloc fail");
+
+	//初始化每个优先队列头结点
+	for (i = 0; i < base->nactivequeues; ++i) {
+		base->activequeues[i] = malloc(sizeof(struct event_list));
+		if (base->activequeues[i] == NULL)
+			LOG_ERROR("malloc fail");
+		TAILQ_INIT(base->activequeues[i]);
+	}
+
+	return (0);
+}
+
 void event_set(struct event *ev, int fd, short events,
 		void (*callback)(int, short, void *), void *arg)
 {
@@ -93,6 +127,13 @@ void event_set(struct event *ev, int fd, short events,
 	ev->ev_pri = current_base->nactivequeues/2;
 }
 
+/*
+ * 注册事件
+ *
+ * @param ev 要注册的事件
+ * @param tv 超时时间
+ * @return int
+ */
 int event_add(struct event *ev, struct timeval *tv)
 {
 	struct event_base *base = ev->ev_base;
@@ -108,6 +149,7 @@ int event_add(struct event *ev, struct timeval *tv)
 
 	assert(!(ev->ev_flags & ~EVLIST_ALL));
 
+	//timeout事件
 	if (tv != NULL) {
 		struct timeval now;
 
@@ -123,6 +165,7 @@ int event_add(struct event *ev, struct timeval *tv)
 		event_queue_insert(base, ev, EVLIST_TIMEOUT);
 	}
 
+	//如事件ev不在事件队列或者就绪队列, 则注册事件
 	if ((ev->ev_events & (EVENT_READ|EVENT_WRITE)) &&
 		!(ev->ev_flags & (EVLIST_INSERTED|EVLIST_ACTIVE)))
 	{
@@ -171,10 +214,18 @@ int event_dispatch(void)
 	return 0;
 }
 
+/**
+ * 将事件插入事件队列
+ * 
+ * @param base  反应堆
+ * @param ev    事件
+ * @param queue 事件状态
+ */
 static void event_queue_insert(struct event_base *base, struct event *ev, int queue)
 {
 	//处理重复插入
 	if (ev->ev_flags & queue) {
+		//已在就绪队列,返回
 		if (queue & EVLIST_ACTIVE)
 			return;
 
@@ -182,20 +233,20 @@ static void event_queue_insert(struct event_base *base, struct event *ev, int qu
 			ev, ev->ev_fd, queue);
 	}
 	base->event_count++;
-	ev->ev_flags |= queue;
+	ev->ev_flags |= queue; //记录此时event在队列的状态
 
 	switch (queue) {
-		case EVLIST_TIMEOUT: {
+		case EVLIST_TIMEOUT: { //超时处理
 			struct event *tmp = RB_INSERT(event_tree, &base->timetree, ev);
 			assert(tmp == NULL);
 			break;
 		}
 
-		case EVLIST_INSERTED:
+		case EVLIST_INSERTED: //io或signal事件, 加入事件队列
 			TAILQ_INSERT_TAIL(&base->eventqueue, ev, ev_next);
 			break;
 
-		case EVLIST_ACTIVE:
+		case EVLIST_ACTIVE:	//就绪事件, 加入到就绪队列
 			base->event_count_active++;
 			TAILQ_INSERT_TAIL(base->activequeues[ev->ev_pri], ev, ev_active_next);
 			break;
@@ -233,38 +284,12 @@ static void event_queue_remove(struct event_base *base, struct event *ev, int qu
 	}
 }
 
-int event_base_priority_init(struct event_base *base, int npriorities)
-{
-	int i;
-	LOG_DEBUG("event base priority init: %d", npriorities);
-
-	if (base->event_count_active)
-		return (-1);
-
-	if (base->nactivequeues && npriorities != base->nactivequeues) {
-		for (i = 0; i < base->nactivequeues; ++i) {
-			free(base->activequeues[i]);
-		}
-		free(base->activequeues);
-	}
-
-	base->nactivequeues = npriorities;
-	base->activequeues = (struct event_list **) calloc(npriorities,
-		npriorities * sizeof(struct event_list));
-
-	if (base->activequeues == NULL)
-		LOG_ERROR("calloc fail");
-
-	for (i = 0; i < base->nactivequeues; ++i) {
-		base->activequeues[i] = malloc(sizeof(struct event_list));
-		if (base->activequeues[i] == NULL)
-			LOG_ERROR("malloc fail");
-		TAILQ_INIT(base->activequeues[i]);
-	}
-
-	return (0);
-}
-
+/**
+ * 删除事件
+ * 		
+ * @param  ev 事件
+ * @return    int
+ */
 int event_del(struct event *ev)
 {
 	struct event_base *base = ev->ev_base;

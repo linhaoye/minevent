@@ -60,10 +60,8 @@ void *epoll_init(void)
 
 	memset(&epollop, 0, sizeof(epollop));
 
-	if ((epfd == epoll_create(nfiles)) == -1) {
+	if ((epfd == epoll_create(nfiles)) == -1)
 		LOG_ERROR("epoll_create(%d)", nfiles);
-		return (NULL);
-	}
 
 	FD_CLOSEONEXEC(epfd);
 
@@ -98,10 +96,9 @@ int epoll_recalc(struct event_base *base, void *arg, int max)
 			nfds <<= 1;
 
 		fds = realloc(epollop->fds, nfds * sizeof(struct evepoll));
-		if (fds == NULL) {
+		if (fds == NULL)
 			LOG_ERROR("realloc() error");
-			return (-1);
-		}
+
 		epollop->fds = fds;
 		memset(fds + epollop->nfds, 0,
 			(nfds - epollop->nfds) * sizeof(struct evepoll));
@@ -122,10 +119,8 @@ int epoll_dispatch(struct event_base *base, void *arg, struct timeval *tv)
 	res = epoll_wait(epollop->epfd, events, epollop->nevents, timeout);
 
 	if (res == -1) {
-		if (errno != EINTR) {
+		if (errno != EINTR)
 			LOG_ERROR("epoll_wait() error!");
-			return (-1);
-		}
 	}
 
 	for (i = 0; i < res; i++) {
