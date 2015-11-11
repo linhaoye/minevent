@@ -24,7 +24,7 @@ struct evepoll {
 struct epollop {
 	struct evepoll *fds;
 	int nfds;
-	struct epoll_event *events;
+	struct epoll_event *events; //指向保存返回事件的文件描述符集合的数组(epoll_event类型数组)
 	int nevents;
 	int epfd;	//epoll例程
 } epollop;
@@ -60,6 +60,7 @@ void *epoll_init(void)
 
 	memset(&epollop, 0, sizeof(epollop));
 
+	//创建epoll例侱
 	if ((epfd == epoll_create(nfiles)) == -1)
 		LOG_ERROR("epoll_create(%d)", nfiles);
 
@@ -79,7 +80,7 @@ void *epoll_init(void)
 		return (NULL);
 	}
 	epollop.nfds = nfiles;
-
+	
 	return (&epollop);
 }
 
@@ -176,7 +177,7 @@ int epoll_add(void *arg, struct event *ev)
 	events = 0;
 	if (evep->evread != NULL) {
 		events |= EPOLLIN;
-		op = EPOLL_CTL_ADD;
+		op = EPOLL_CTL_MOD;
 	}
 	if (evep->evwrite != NULL) {
 		events |= EPOLLOUT;

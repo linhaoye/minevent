@@ -153,11 +153,12 @@ int event_add(struct event *ev, struct timeval *tv)
 	if (tv != NULL) {
 		struct timeval now;
 
+		//&EVLIST_TIMEOUT表时event已经在定时器堆中了, 删除旧的
 		if (ev->ev_flags & EVLIST_TIMEOUT)
 			event_queue_remove(base, ev, EVLIST_TIMEOUT);
 
 		gettimeofday(&now, NULL);
-		timeradd(&now, tv, &ev->ev_timeout);
+		timeradd(&now, tv, &ev->ev_timeout);//将现在时间now和定时时间tv相加
 
 		LOG_DEBUG("event_add: timeout in %d seconds, call %p",
 			(int)tv->tv_sec, ev->ev_callback);
@@ -169,6 +170,7 @@ int event_add(struct event *ev, struct timeval *tv)
 	if ((ev->ev_events & (EVENT_READ|EVENT_WRITE)) &&
 		!(ev->ev_flags & (EVLIST_INSERTED|EVLIST_ACTIVE)))
 	{
+		//插入到事件队列并注册到base的例程(这里顺序应该倒过来)
 		event_queue_insert(base, ev, EVLIST_INSERTED);
 		return (evsel->add(evbase, ev));
 	}
