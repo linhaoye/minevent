@@ -13,11 +13,15 @@
 //only epoll
 extern const struct eventop epollops;
 
+// 没有采用I/O策略, 直接硬编码为epoll接口
 const struct eventop *eventops[] = {
 	&epollops,
 	NULL
 };
 
+/**
+ * 全局变量, 保存当前的反应堆
+ */
 struct event_base *current_base = NULL;
 
 /* prototypes */
@@ -47,7 +51,13 @@ RB_PROTOTYPE(event_tree, event, ev_timeout_node, compare);
 
 RB_GENERATE(event_tree, event, ev_timeout_node, compare);
 
-//初始化一个全局的 event_base
+/**
+ * 
+ * 初始化一个全局的 event_base
+ * 
+ * \return void*
+ * 
+ */
 void* event_init(void)
 {
 	int i;
@@ -77,6 +87,16 @@ void* event_init(void)
 	return (current_base);
 }
 
+/**
+ * 
+ * 初始反应堆的优先队列
+ * 
+ * \param  base        反应堆
+ * 
+ * \param  npriorities 个数
+ * 
+ * \return int
+ */
 int event_base_priority_init(struct event_base *base, int npriorities)
 {
 	int i;
@@ -98,19 +118,36 @@ int event_base_priority_init(struct event_base *base, int npriorities)
 		npriorities * sizeof(struct event_list *));
 
 	if (base->activequeues == NULL)
-		LOG_ERROR("calloc fail");
+		LOG_ERROR("allocated activequeues fail, out of memory.");
 
 	//初始化每个优先队列头结点
 	for (i = 0; i < base->nactivequeues; ++i) {
 		base->activequeues[i] = malloc(sizeof(struct event_list));
 		if (base->activequeues[i] == NULL)
-			LOG_ERROR("malloc fail");
+			LOG_ERROR("allocated activequeues[%d] fail, out of memory.", i);
 		TAILQ_INIT(base->activequeues[i]);
 	}
 
 	return (0);
 }
 
+/**
+ *
+ * 事件初始化
+ * 
+ * \param ev 待初始化的event对象
+ * 
+ * \param fd event绑定的<句柄>, 对于信号事件, 就是关注的信号
+ * 
+ * \param events 在该fd上关注的事件类型, 比如EV_READ, EV_WRITE .etc
+ * 
+ * \param cb 事件发生时的回调函数
+ * 
+ * \param arg 传递给cb函数指针参数
+ *
+ * \return void
+ * 
+ */
 void event_set(struct event *ev, int fd, short events,
 		void (*callback)(int, short, void *), void *arg)
 {
@@ -127,18 +164,44 @@ void event_set(struct event *ev, int fd, short events,
 	ev->ev_pri = current_base->nactivequeues/2;
 }
 
+/**
+ * 
+ * 设置event从属的event_base
+ * 
+ * \param  base base反应堆
+ * 
+ * \param  ev   事件对象
+ * 
+ * \return int
+ */
+int event_base_set(struct event_base *base, struct event *ev)
+{
+	//只有EVLIST_INIT的事件才可以分配不同的反应堆
+	if (ev->ev_flags != EVLIST_INIT)
+		return (-1);
+
+	ev->ev_base = base;
+	ev->ev_pri = base->nactivequeues / 2;
+
+	return (0);
+}
+
 /*
+ *
  * 注册事件
  *
- * @param ev 要注册的事件
- * @param tv 超时时间
- * @return int
+ * \param ev 要注册的事件
+ * 
+ * \param tv 超时时间
+ * 
+ * \return int
+ * 
  */
 int event_add(struct event *ev, struct timeval *tv)
 {
-	struct event_base *base = ev->ev_base;
+	struct event_base *base = ev->ev_base; //要注册到的反应堆
 	const struct eventop *evsel = base->evsel;
-	void *evbase = base->evbase;
+	void *evbase = base->evbase; 		   //base使用的系统I/O策略
 
 	LOG_DEBUG("event add: event: %p, %s %s %s call %p",
 		ev,
@@ -178,10 +241,17 @@ int event_add(struct event *ev, struct timeval *tv)
 	return (0);
 }
 
+/**
+ * 
+ * 事件循环 (非线程安全)
+ * 
+ * @return  int
+ */
 int event_dispatch(void)
 {
-	LOG_DEBUG("event dispatch");
+	LOG_DEBUG("begin dispatch.");
 
+	//base默认为保存的当前反应堆
 	struct event_base * base = current_base;
 	const struct eventop *evsel = base->evsel;
 	void *evbase = base->evbase;
@@ -190,38 +260,70 @@ int event_dispatch(void)
 	int res, done;
 
 	done = 0;
-	while(!done) {
+	while(!done) { //事件循环
+
+		//随着注册的事件数量越来越多, 动态调整反应堆的大小
 		if (evsel->recalc(base, evbase, 0) == -1)	
 			return -1;
 
+		//对于timeout事件, 这里还要做一步处理(因为学习用的, 这里省了)
+
+        /* 
+         * 校正系统时间,如果系统使用的是非MONOTONIC时间, 用户可能会向后调整了系统时间  
+         * 在timeout_correct函数里, 比较last wait time和当前时间，如果当前时间< last wait time  
+         * 表明时间有问题，这是需要更新timetree中所有定时事件的超时时间。 
+         *
+         *  timeout_correct(base, &tv);
+         */
+
+
+		// 根据timetree中事件的最小超时间, 计算出系统I/O demultiplexer的最大等待时间
 		if (!base->event_count_active)
+			//这里我在timeout_next函数里硬编码为 {5, 0} 5秒
 			timeout_next(base, &tv);
 		else
+			// 将tv清空
+			// 依然有未处理的就绪时间, 就让I/O demultiplexer立即返回, 不必等待
 			timerclear(&tv);
 
+		// 当前没有注册事件, 就退出事件循环
 		if (!event_haveevents(base))
 			return (1);
 
+		// 调用系统I/O demultiplexer等待就绪I/O events, 可能是epoll_wait,或者select等；  
+        // 在evsel->dispatch()中, 会把就绪signal event, I/O event插入到激活链表中
 		res = evsel->dispatch(base, evbase, &tv);
 
 		if (res == -1)
 			return (-1);
 
+		//检查timetree中的定时事件, 将就就绪的timer事件从timetree中删除, 并插入到激活链表中
 		timeout_process(base);
 
+		// 调用event_process_active()处理激活链表中的就绪event, 调用其回调函数执行事件处理
+        // 该函数会寻找最高优先级(priority值越小优先级越高)的激活事件链表
+        // 然后处理链表中的所有就绪事件  
+        // 因此低优先级的就绪事件可能得不到及时处理
 		if (base->event_count_active)
 			event_process_active(base);
 	}
+
+	LOG_DEBUG("terminate dispatch.");
 
 	return 0;
 }
 
 /**
+ * 
  * 将事件插入事件队列
  * 
- * @param base  反应堆
- * @param ev    事件
- * @param queue 事件状态
+ * \param base  反应堆
+ * 
+ * \param ev    事件
+ * 
+ * \param queue 事件状态
+ *
+ * \return void
  */
 static void event_queue_insert(struct event_base *base, struct event *ev, int queue)
 {
@@ -254,10 +356,22 @@ static void event_queue_insert(struct event_base *base, struct event *ev, int qu
 			break;
 
 		default:
-			LOG_ERROR("unkown queue!");
+			LOG_ERROR("unkown queue.");
 	}
 }
 
+/**
+ * 
+ * 将事件从队列中移除
+ * 
+ * \param base  反应堆
+ * 
+ * \param ev    事伯
+ * 
+ * \param queue 指定的队列
+ *
+ * \param void
+ */
 static void event_queue_remove(struct event_base *base, struct event *ev, int queue)
 {
 	if (!(ev->ev_flags & queue))
@@ -282,15 +396,17 @@ static void event_queue_remove(struct event_base *base, struct event *ev, int qu
 			break;
 
 		default:
-			LOG_ERROR("unkown queue");
+			LOG_ERROR("unkown queue.");
 	}
 }
 
 /**
+ * 
  * 删除事件
  * 		
- * @param  ev 事件
- * @return    int
+ * \param  ev 事件
+ * 
+ * \return int
  */
 int event_del(struct event *ev)
 {
@@ -303,6 +419,7 @@ int event_del(struct event *ev)
 
 	assert(!(ev->ev_flags & ~EVLIST_ALL));
 
+	//从对应的链表删除
 	if (ev->ev_flags & EVLIST_TIMEOUT)
 		event_queue_remove(base, ev, EVLIST_TIMEOUT);
 
@@ -317,6 +434,16 @@ int event_del(struct event *ev)
 	return (0);
 }
 
+/**
+ * 
+ * 激活事件
+ * 
+ * \param ev  事件
+ * 
+ * \param res 状态
+ *
+ * \param void
+ */
 void event_active(struct event *ev, int res)
 {
 	LOG_DEBUG("event active: ev=%p", ev);	
@@ -330,6 +457,17 @@ void event_active(struct event *ev, int res)
 	event_queue_insert(ev->ev_base, ev, EVLIST_ACTIVE);
 }
 
+
+/**
+ * 
+ * 查找最小的超时时间
+ * 
+ * \param  base 反应堆
+ * 
+ * \param  tv   tv
+ * 
+ * \return int
+ */
 int timeout_next(struct event_base *base, struct timeval *tv)
 {
 	struct timeval dflt = {5, 0}; // make it 5s
@@ -359,6 +497,14 @@ int timeout_next(struct event_base *base, struct timeval *tv)
 	return (0);
 }
 
+/**
+ * 
+ * 处理定时事件
+ * 
+ * \param base 反应堆
+ *
+ * \param void
+ */
 void timeout_process(struct event_base *base)
 {
 	struct timeval now;
@@ -381,6 +527,14 @@ void timeout_process(struct event_base *base)
 	}
 }
 
+/**
+ * 
+ * 处理激活队列的事件
+ * 
+ * \param base 反应堆
+ *
+ * \param void
+ */
 void event_process_active(struct event_base *base)
 {
 	struct event *ev;
@@ -405,6 +559,14 @@ void event_process_active(struct event_base *base)
 	}
 }
 
+/**
+ * 
+ * 检测是否有应绪事件
+ * 
+ * \param  base 反应堆
+ * 
+ * \return int
+ */
 int event_haveevents(struct event_base *base)
 {
 	return (base->event_count > 0);

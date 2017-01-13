@@ -43,8 +43,13 @@ struct {								\
 
 struct event_base;
 struct event {
+	/**
+	 * ev_next, ev_active_next都是双向链表节点.它们是libevent对不同的事件类型和
+	 * 不同时期,对事件的管理的字段
+	 */
 	TAILQ_ENTRY(event) ev_next;
 	TAILQ_ENTRY(event) ev_active_next;
+
 	RB_ENTRY(event) ev_timeout_node;
 
 	struct event_base *ev_base;
@@ -55,7 +60,7 @@ struct event {
 	void (*ev_callback)(int, short, void *arg); //事件处理回调函数
 
 	struct timeval ev_timeout;
-
+ 
 	int ev_flags;	//Event当前的状态
 	int ev_res;		//记录当前激活事件的类型
 	int ev_pri;		//优先级
@@ -73,6 +78,7 @@ struct eventop {
 
 void* event_init(void);
 void event_set(struct event*, int, short, void (*)(int, short, void*), void*);
+int event_base_set(struct event_base*, struct event*);
 int event_add(struct event*, struct timeval *);
 int event_del(struct event*);
 void event_active(struct event*, int);

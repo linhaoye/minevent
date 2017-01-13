@@ -11,8 +11,8 @@ struct event_base {
 	const struct eventop *evsel;
 	void *evbase;
 
-	int event_count;
-	int event_count_active;
+	int event_count;					//所有事件数
+	int event_count_active;				//就绪事件数
 
 	struct event_list **activequeues;	// 就绪队列(下标为优先级)
 	int nactivequeues;
