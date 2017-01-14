@@ -291,7 +291,7 @@ int event_dispatch(void)
 			return (1);
 
 		// 调用系统I/O demultiplexer等待就绪I/O events, 可能是epoll_wait,或者select等；  
-        // 在evsel->dispatch()中, 会把就绪signal event, I/O event插入到激活链表中
+		// 在evsel->dispatch()中, 会把就绪signal event, I/O event插入到激活链表中
 		res = evsel->dispatch(base, evbase, &tv);
 
 		if (res == -1)
@@ -301,9 +301,9 @@ int event_dispatch(void)
 		timeout_process(base);
 
 		// 调用event_process_active()处理激活链表中的就绪event, 调用其回调函数执行事件处理
-        // 该函数会寻找最高优先级(priority值越小优先级越高)的激活事件链表
-        // 然后处理链表中的所有就绪事件  
-        // 因此低优先级的就绪事件可能得不到及时处理
+		// 该函数会寻找最高优先级(priority值越小优先级越高)的激活事件链表
+		// 然后处理链表中的所有就绪事件  
+		// 因此低优先级的就绪事件可能得不到及时处理
 		if (base->event_count_active)
 			event_process_active(base);
 	}
@@ -366,7 +366,7 @@ static void event_queue_insert(struct event_base *base, struct event *ev, int qu
  * 
  * \param base  反应堆
  * 
- * \param ev    事伯
+ * \param ev    事件
  * 
  * \param queue 指定的队列
  *
