@@ -13,8 +13,11 @@ TAILQ是`<sys/queue.h>`中定义的一种名为尾队列的数据结构.
 
 TAILQ是FreeBSD/linux内核对双向队列操作的一种抽象, 它由宏来实现, 抽象程度不亚于C++, 能实现操作队列所需的各种操作.
 
+一个数据不为空的队列结构如图所示:
+![](./tailq_structure.png)
+
 ## 2.TAILQ的定义
-首先来看一下这个尾队的定义
+首先来看一下这个尾队中节点元素的定义
 
 ```c
 #define TAILQ_ENTRY(type) \
@@ -23,6 +26,23 @@ struct { \
 	struct type **tqe_prev;	/* address of previous next element */ \
 }
 ```
+例如, 我们需要一个int型的队列时, 可以这样定义一个节点:
+
+```c
+struct int_queue {
+	int value;
+	TAILQ_ENTRY(int_queue) entry;
+}
+```
+此时列表的节点元素结构如图所示:
+![](./entry.png)
+
+## 3.队列的操作
+
+--初始化
+--增
+--删
+--遍历
 
 ## 4.reference
 

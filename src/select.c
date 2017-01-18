@@ -22,6 +22,9 @@ int select_del(void *, struct event *);
 int select_recalc(struct event_base *, void *, int);
 int select_dispatch(struct event_base *, void *, struct timeval *);
 
+/**
+ * 这个I/O实例为全局变量, 所以不能用于多线程
+ */
 const struct eventop selectops = {
 	"select",
 	select_init,
@@ -82,11 +85,11 @@ int select_recalc(struct event_base *base, void *arg, int max)
 
 	if (fdsz > sop->event_fdsz) {
 		if ((readset = realloc(sop->event_readset, fdsz)) == NULL)
-			LOG_ERROR("malloc");
+			LOG_ERROR("malloc() error! out of memory.");
 
 		if ((writeset = realloc(sop->event_writeset, fdsz)) == NULL) {
 			free(readset);
-			LOG_ERROR("malloc");
+			LOG_ERROR("malloc() error!, out of memory.");
 		}
 
 		memset((char*)readset + sop->event_fdsz, 0,
@@ -125,7 +128,7 @@ int select_dispatch(struct event_base *base, void *arg, struct timeval *tv)
 
 	if (res == -1) {
 		if (errno != EINTR) {
-			LOG_DEBUG("select! %s", strerror(errno));
+			LOG_DEBUG("select() error! %s", strerror(errno));
 			return (-1);
 		}
 

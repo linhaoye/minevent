@@ -21,6 +21,9 @@ struct evepoll {
 	struct event *evwrite;
 };
 
+/**
+ * 这个I/O实例为全局变量, 所以不能用于多线程
+ */
 struct epollop {
 	struct evepoll *fds;
 	int nfds;
@@ -128,7 +131,7 @@ int epoll_dispatch(struct event_base *base, void *arg, struct timeval *tv)
 
 	for (i = 0; i < res; i++) {
 		int which = 0;
-		int what = events[i].events;
+		int what = events[i].events; //发生的事件集! (EPOLLIN EPOLLOUT)
 		struct event *evread = NULL, *evwrite = NULL;
 
 		evep = (struct evepoll *)events[i].data.ptr;
