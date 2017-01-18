@@ -26,6 +26,7 @@ struct { \
 	struct type **tqe_prev;	/* address of previous next element */ \
 }
 ```
+
 例如, 我们需要一个int型的队列时, 可以这样定义一个节点:
 
 ```c
@@ -34,15 +35,17 @@ struct int_queue {
 	TAILQ_ENTRY(int_queue) entry;
 }
 ```
-此时列表的节点元素结构如图所示:
+
+此时列表的节点元素结构如图所示: 
+
 ![](./entry.png)
 
 ## 3.队列的操作
 
---初始化
---增
---删
---遍历
+- 初始化 
+- 增 
+- 删 
+- 遍历 
 
 ## 4.reference
 
